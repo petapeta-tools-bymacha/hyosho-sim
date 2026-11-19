@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>氷晶シミュレーター</title>
+<meta name="description" content="ペタペタペンギン団の氷晶がどれだけ貯まるかを計算するシミュレーター（非公式・ファン作成）">
+<style>
+:root{
+  --bg:#f3f7fb; --card:#ffffff; --ink:#1b2a3a; --sub:#5f7186; --line:#dbe4ee;
+  --accent:#2f75b5; --accent-soft:#e3eef9; --good:#1f8a4c; --warn:#c0392b;
+  --input:#fff8dc; --off:#a9b5c2; --chart-target:#c0392b;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1720; --card:#17222e; --ink:#e6edf4; --sub:#9aabbd; --line:#2a3846;
+    --accent:#6aa9e6; --accent-soft:#1d3247; --good:#4cc283; --warn:#ff7b6b;
+    --input:#2a2716; --off:#55636f; --chart-target:#ff7b6b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1720; --card:#17222e; --ink:#e6edf4; --sub:#9aabbd; --line:#2a3846;
+  --accent:#6aa9e6; --accent-soft:#1d3247; --good:#4cc283; --warn:#ff7b6b;
+  --input:#2a2716; --off:#55636f; --chart-target:#ff7b6b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:980px;margin:0 auto;padding:12px 16px 80px}
+header{padding:14px 0 6px}
+h1{font-size:20px;margin:0}
+.lead{color:var(--sub);font-size:12.5px;margin:4px 0 0}
+.grid{display:grid;gap:12px}
+@media(min-width:860px){.grid.two{grid-template-columns:1fr 1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h2{font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:6px}
+.card h2 .n{background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+label.f{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+label.f:last-child{border-bottom:none}
+input,select{font:inherit;color:var(--ink);background:var(--input);border:1px solid var(--line);
+  border-radius:8px;padding:6px 8px;min-width:0}
+input[type=number]{width:110px;text-align:right}
+input[type=date]{width:150px}
+.big{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:600px){.big{grid-template-columns:repeat(4,1fr)}}
+.kpi{background:var(--accent-soft);border-radius:12px;padding:10px}
+.kpi .l{font-size:11.5px;color:var(--sub)}
+.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;word-break:break-all}
+.kpi .s{font-size:11px;color:var(--sub)}
+.kpi.main .v{color:var(--accent)}
+.rows{margin-top:8px;font-size:13.5px}
+.rows div{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line)}
+.rows div span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+/* item list */
+.item{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.item:last-child{border-bottom:none}
+.item .name{font-weight:600;font-size:14px}
+.item .meta{font-size:11.5px;color:var(--sub)}
+.item .ctl{grid-column:2;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--sub);align-items:center}
+.item .ctl input[type=date]{width:140px;padding:4px 6px}
+.item .ctl input[type=number]{width:80px;padding:4px 6px}
+.item.off .name,.item.off .meta{color:var(--off)}
+.item.off .ctl{opacity:.45}
+/* switch */
+.sw{position:relative;width:46px;height:28px;flex:none}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:var(--off);border-radius:28px;transition:.15s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span:before{transform:translateX(18px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.bulk{display:flex;gap:6px;margin:-4px 0 6px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer}
+button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:0 14px}
+details>summary{cursor:pointer;padding:12px 0;font-weight:700;font-size:15px;list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary:before{content:"▸ ";color:var(--accent)}
+details[open]>summary:before{content:"▾ "}
+details .in{padding-bottom:14px}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl th{color:var(--sub);font-weight:600;position:sticky;top:0;background:var(--card)}
+.tbl td.neg{color:var(--warn)}
+.scroll{overflow:auto;max-height:480px;border:1px solid var(--line);border-radius:8px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-top:4px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+.note{font-size:11.5px;color:var(--sub);margin:6px 0 0}
+.adv-grid{display:grid;grid-template-columns:1fr;gap:4px}
+.adv-row{display:grid;grid-template-columns:1fr repeat(5,64px);gap:4px;align-items:center;font-size:12px}
+.adv-row input{width:100%;padding:3px 4px;text-align:right}
+.adv-row.h{color:var(--sub);font-size:11px}
+@media(max-width:560px){
+  .adv-row{grid-template-columns:repeat(5,1fr);padding:4px 0;border-bottom:1px dashed var(--line)}
+  .adv-row>span:first-child{grid-column:1/-1;font-weight:600}
+  .adv-row.h>span:first-child{display:none}
+  .adv-row.h{border-bottom:none}
+}
+footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1>🐧 氷晶シミュレーター</h1>
+    <p class="lead">ペタペタペンギン団で氷晶がどれだけ貯まるかを計算します。入力内容はこの端末にだけ保存されます。</p>
+  </div>
+  <button id="reset" title="入力内容を初期値に戻す" style="white-space:nowrap;font-size:12px;flex:none">リセット</button>
+</header>
+
+<div class="grid">
+  <section class="card" id="result-card">
+    <h2>★ 結果</h2>
+    <div class="big">
+      <div class="kpi main"><div class="l">最終日の所持氷晶</div><div class="v" id="k-final">-</div><div class="s" id="k-period"></div></div>
+      <div class="kpi"><div class="l">課金額の合計</div><div class="v" id="k-cost">-</div><div class="s" id="k-perday"></div></div>
+      <div class="kpi"><div class="l">目標に届く日</div><div class="v" id="k-reach">-</div><div class="s" id="k-reach2"></div></div>
+      <div class="kpi"><div class="l">課金100円あたり</div><div class="v" id="k-eff">-</div><div class="s">課金で得た分のみ</div></div>
+    </div>
+    <div class="rows">
+      <div><span>うち課金で得た氷晶</span><span id="r-pay">-</span></div>
+      <div><span>うち日々のタスク（気力代を引いた後）</span><span id="r-task">-</span></div>
+      <div><span>うち手入力（その他）</span><span id="r-other">-</span></div>
+    </div>
+    <div class="chart" id="chart"></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>所持氷晶</span><span><i style="background:var(--chart-target)"></i>目標</span></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">1</span>まずここ</h2>
+    <label class="f">開始日<input type="date" id="start"></label>
+    <label class="f">何日分計算する？<span><input type="number" id="days" min="1" max="730" inputmode="numeric"> 日</span></label>
+    <label class="f">今持っている氷晶<input type="number" id="init" min="0" inputmode="numeric"></label>
+    <label class="f">目標の氷晶<input type="number" id="target" min="0" inputmode="numeric"></label>
+  </section>
+
+  <div class="grid two">
+    <section class="card">
+      <h2><span class="n">2</span>買うパス</h2>
+      <div class="bulk"><button data-bulk="pass:1">全部オン</button><button data-bulk="pass:0">全部オフ</button></div>
+      <div id="pass-list"></div>
+      <p class="note">期限が切れた日に次を購入する計算です（購入日＝初回購入日＋有効日数×n）。回数を入れるとその回数で終わります（0＝ずっと）。</p>
+    </section>
+    <section class="card">
+      <h2><span class="n">3</span>日々のタスク</h2>
+      <div class="bulk"><button data-bulk="task:1">全部オン</button><button data-bulk="task:0">全部オフ</button></div>
+      <div id="task-list"></div>
+      <p class="note">週・2週・3週ごとの物は、次にもらえる日を「初回」に入れると日付が合います。</p>
+    </section>
+  </div>
+
+  <details>
+    <summary>内訳（項目別）</summary>
+    <div class="in"><div class="scroll"><table class="tbl" id="breakdown"></table></div></div>
+  </details>
+  <details>
+    <summary>月別</summary>
+    <div class="in"><div class="scroll"><table class="tbl" id="monthly"></table></div></div>
+  </details>
+  <details>
+    <summary>日別（1日ずつ・その他の手入力）</summary>
+    <div class="in">
+      <p class="note" style="margin:0 0 8px">「その他」に入れた数は累計に足されます（行けなかった日などはマイナスで）。</p>
+      <div class="scroll"><table class="tbl" id="daily"></table></div>
+    </div>
+  </details>
+  <details>
+    <summary>詳細設定（価格・付与量・ボーナス）</summary>
+    <div class="in">
+      <h3 style="font-size:13px;margin:6px 0">パス</h3>
+      <div class="adv-grid" id="adv-pass"></div>
+      <h3 style="font-size:13px;margin:14px 0 6px">タスク</h3>
+      <div class="adv-grid" id="adv-task"></div>
+      <h3 style="font-size:13px;margin:14px 0 6px">チャージ・連続課金ボーナス</h3>
+      <div id="adv-other"></div>
+    </div>
+  </details>
+  <details>
+    <summary>計算のルール</summary>
+    <div class="in" style="font-size:13px">
+      <ul style="padding-left:18px;margin:0">
+        <li>月パス：購入日に600、購入日を1日目として30日間毎日400。</li>
+        <li>ホーム／釣り／輝光バトルパス：有効期間の最終日（完走日）に完走分を付与。</li>
+        <li>黄金パス／ギルドパス：氷晶はなし（課金額と連続課金ボーナスの条件にだけ関係）。</li>
+        <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。</li>
+        <li>連続課金ボーナス：毎日800円以上課金する前提で、7日周期の2日目に600、4日目に1,300。周期は開始日から数えます（途中からの場合は詳細設定で指定）。</li>
+        <li>同じ日に複数のパスの更新が重なったら、全部その日に購入。</li>
+        <li>セールパック類は無料扱い。気力購入（毎日600）はマイナスで計上。</li>
+      </ul>
+    </div>
+  </details>
+</div>
+<footer>非公式のファン作成ツールです。数値は目安で、実際のゲームと違う場合があります。</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const KEY = "petapeta-hyosho-sim-v1";
+const DEFAULTS = {
+  start: null, days: 90, init: 0, target: 100000,
+  initCharge: 0, cycleOffset: 1,
+  charge: {price: 800, gain: 62, every: 20, bonus: 14000},
+  minSpend: 800, streak: [0, 600, 0, 1300, 0, 0, 0],
+  passes: [
+    {name:"月パス①", dur:30, price:800, buy:600, daily:400, comp:0},
+    {name:"月パス②", dur:30, price:800, buy:600, daily:400, comp:0},
+    {name:"ホームパス", dur:30, price:800, buy:0, daily:0, comp:4000},
+    {name:"釣りパス", dur:30, price:800, buy:0, daily:0, comp:4000},
+    {name:"輝光バトルパス①", dur:14, price:800, buy:0, daily:0, comp:1000},
+    {name:"輝光バトルパス②", dur:14, price:1600, buy:0, daily:0, comp:1400},
+    {name:"黄金パス①", dur:7, price:800, buy:0, daily:0, comp:0},
+    {name:"黄金パス②", dur:7, price:1600, buy:0, daily:0, comp:0},
+    {name:"ギルドパス①", dur:14, price:800, buy:0, daily:0, comp:0},
+    {name:"ギルドパス②", dur:14, price:1600, buy:0, daily:0, comp:0}
+  ].map(p => Object.assign({on:true, first:null, count:0}, p)),
+  tasks: [
+    {name:"栄誉ヘル（ダンジョン）", amt:560, times:3, per:1, unit:"日"},
+    {name:"バトロワ", amt:540, times:1, per:1, unit:"日"},
+    {name:"ギフトコード", amt:100, times:1, per:7, unit:"日"},
+    {name:"天空対決", amt:700, times:1, per:14, unit:"日"},
+    {name:"神の試練", amt:1200, times:1, per:14, unit:"日"},
+    {name:"デイリータスク", amt:70, times:1, per:1, unit:"日"},
+    {name:"デイリーギルドタスク", amt:25, times:1, per:1, unit:"日"},
+    {name:"日間セールパック", amt:100, times:1, per:1, unit:"日"},
+    {name:"週間セールパック", amt:160, times:1, per:7, unit:"日"},
+    {name:"月間セールパック", amt:100, times:1, per:1, unit:"月"},
+    {name:"デイリーセール", amt:50, times:1, per:1, unit:"日"},
+    {name:"7日間ログインボーナス", amt:400, times:1, per:7, unit:"日"},
+    {name:"ノーマル更新", amt:400, times:1, per:7, unit:"日"},
+    {name:"ハード更新", amt:1200, times:1, per:14, unit:"日"},
+    {name:"エクストラ更新", amt:1950, times:1, per:21, unit:"日"},
+    {name:"ヘル更新", amt:2400, times:1, per:21, unit:"日"},
+    {name:"フレンド展示館いいね", amt:30, times:1, per:1, unit:"日"},
+    {name:"気力購入（消費）", amt:-600, times:1, per:1, unit:"日"}
+  ].map(t => Object.assign({on:true, first:null}, t)),
+  other: {}
+};
+
+// ---- date helpers (UTC day numbers) ----
+const DAY = 86400000;
+const todayISO = () => { const d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0,10); };
+const toNum = iso => Math.round(Date.UTC(+iso.slice(0,4), +iso.slice(5,7)-1, +iso.slice(8,10)) / DAY);
+const toISO = n => new Date(n*DAY).toISOString().slice(0,10);
+const ymd = n => { const d = new Date(n*DAY); return [d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate(), d.getUTCDay()]; };
+const md = n => { const [,m,d] = ymd(n); return m + "/" + d; };
+const WD = "日月火水木金土";
+const fmt = v => Math.round(v).toLocaleString("ja-JP");
+const mod = (a,b) => ((a % b) + b) % b;
+
+// ---- state ----
+const clone = o => JSON.parse(JSON.stringify(o));
+let S;
+function load(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch(e) { saved = null; }
+  S = clone(DEFAULTS);
+  S.start = todayISO();
+  if (saved && typeof saved === "object") {
+    for (const k of ["start","days","init","target","initCharge","cycleOffset","minSpend"]) if (saved[k] != null) S[k] = saved[k];
+    if (saved.charge) Object.assign(S.charge, saved.charge);
+    if (Array.isArray(saved.streak) && saved.streak.length === 7) S.streak = saved.streak;
+    if (Array.isArray(saved.passes)) saved.passes.forEach((p,i) => { if (S.passes[i]) Object.assign(S.passes[i], p); });
+    if (Array.isArray(saved.tasks)) saved.tasks.forEach((t,i) => { if (S.tasks[i]) Object.assign(S.tasks[i], t); });
+    if (saved.other && typeof saved.other === "object") S.other = saved.other;
+  }
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+
+// ---- engine (Excel版と同じルール) ----
+function simulate(){
+  const start = toNum(S.start), days = Math.max(1, Math.min(730, Math.floor(+S.days || 1)));
+  const P = S.passes.map(p => ({...p, f: toNum(p.first || S.start), dur: Math.max(1, +p.dur|0), count: Math.max(0, +p.count|0)}));
+  const T = S.tasks.map(t => ({...t, f: toNum(t.first || S.start), per: Math.max(1, +t.per|0)}));
+  const rows = []; let cum = +S.init || 0, cost = 0, chargeCount = +S.initCharge || 0;
+  const passCr = P.map(() => 0), passBuy = P.map(() => 0), taskCr = T.map(() => 0), taskHits = T.map(() => 0);
+  let chargeTimes = 0, chargeCr = 0, chargeBonusTimes = 0, streakCr = 0, streakTimes = 0, otherCr = 0;
+  for (let n = 1; n <= days; n++) {
+    const day = start + n - 1;
+    let passCost = 0, pCr = 0; const bought = [];
+    P.forEach((p, i) => {
+      const k = day - p.f;
+      const inPer = p.on && k >= 0 && (p.count === 0 || k < p.dur * p.count);
+      if (!inPer) return;
+      const b = mod(k, p.dur) === 0;
+      const c = (b ? +p.buy : 0) + (+p.daily) + (mod(k + 1, p.dur) === 0 ? +p.comp : 0);
+      if (b) { passCost += +p.price; passBuy[i]++; bought.push(p.name); }
+      passCr[i] += c; pCr += c;
+    });
+    let charge = 0, cCr = 0;
+    if (passCost < +S.minSpend) {
+      charge = 1; chargeCount++; chargeTimes++;
+      cCr = +S.charge.gain;
+      if (mod(chargeCount, Math.max(1, +S.charge.every|0)) === 0) { cCr += +S.charge.bonus; chargeBonusTimes++; }
+      chargeCr += cCr;
+    }
+    const spend = passCost + charge * (+S.charge.price);
+    const cyc = mod(n - 1 + (+S.cycleOffset || 1) - 1, 7) + 1;
+    const sb = spend >= +S.minSpend ? (+S.streak[cyc - 1] || 0) : 0;
+    if (sb > 0) streakTimes++;
+    streakCr += sb;
+    const [y, m, dd] = ymd(day);
+    let tCr = 0;
+    T.forEach((t, i) => {
+      if (!t.on || day < t.f) return;
+      let hit;
+      if (t.unit === "月") {
+        const [fy, fm, fd] = ymd(t.f);
+        hit = dd === fd && mod((y - fy) * 12 + m - fm, t.per) === 0;
+      } else hit = mod(day - t.f, t.per) === 0;
+      if (hit) { const v = (+t.amt) * (+t.times); taskCr[i] += v; taskHits[i]++; tCr += v; }
+    });
+    const oth = +(S.other[toISO(day)] || 0); otherCr += oth;
+    const gain = pCr + cCr + sb + tCr + oth;
+    cum += gain; cost += spend;
+    rows.push({n, day, passCost, bought, charge, chargeCount, cCr, cyc, sb, tCr, pCr, oth, gain, cum, spend, cost});
+  }
+  return {rows, days, start, P, T, passCr, passBuy, taskCr, taskHits, chargeTimes, chargeCr, chargeBonusTimes, streakCr, streakTimes, otherCr, cost, final: cum};
+}
+window.__simulate = () => simulate();
+
+// ---- UI build ----
+const $ = id => document.getElementById(id);
+const el = (tag, attrs, html) => { const e = document.createElement(tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); if (html != null) e.innerHTML = html; return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function cycleText(t){ const per = +t.per; let s = t.unit === "月" ? (per === 1 ? "毎月" : per + "か月ごと") : per === 1 ? "毎日" : per % 7 === 0 ? (per / 7) + "週ごと" : per + "日ごと"; if (+t.times > 1) s += "×" + t.times + "回"; return s; }
+
+function buildLists(){
+  const pl = $("pass-list"); pl.innerHTML = "";
+  S.passes.forEach((p, i) => {
+    const gets = [p.buy ? "購入時" + fmt(p.buy) : "", p.daily ? "毎日" + fmt(p.daily) : "", p.comp ? "完走" + fmt(p.comp) : ""].filter(Boolean).join("・") || "氷晶なし";
+    const it = el("div", {class: "item" + (p.on ? "" : " off")});
+    it.innerHTML = `<label class="sw"><input type="checkbox" data-p="${i}" data-k="on" ${p.on ? "checked" : ""} aria-label="${esc(p.name)}を買う"><span></span></label>
+      <div><div class="name">${esc(p.name)}</div><div class="meta">${fmt(p.price)}円・${p.dur}日／${gets}</div></div>
+      <div class="ctl"><label>初回 <input type="date" data-p="${i}" data-k="first" value="${p.first || S.start}"></label>
+      <label>回数 <input type="number" min="0" data-p="${i}" data-k="count" value="${p.count}" inputmode="numeric"></label></div>`;
+    pl.appendChild(it);
+  });
+  const tl = $("task-list"); tl.innerHTML = "";
+  S.tasks.forEach((t, i) => {
+    const it = el("div", {class: "item" + (t.on ? "" : " off")});
+    it.innerHTML = `<label class="sw"><input type="checkbox" data-t="${i}" data-k="on" ${t.on ? "checked" : ""} aria-label="${esc(t.name)}をやる"><span></span></label>
+      <div><div class="name">${esc(t.name)}</div><div class="meta">${cycleText(t)}</div></div>
+      <div class="ctl"><label>初回 <input type="date" data-t="${i}" data-k="first" value="${t.first || S.start}"></label>
+      <label>1回 <input type="number" data-t="${i}" data-k="amt" value="${t.amt}" inputmode="numeric"></label></div>`;
+    tl.appendChild(it);
+  });
+  // advanced
+  const ap = $("adv-pass"); ap.innerHTML = '<div class="adv-row h"><span>パス</span><span>価格</span><span>日数</span><span>購入時</span><span>毎日</span><span>完走</span></div>';
+  S.passes.forEach((p, i) => {
+    const r = el("div", {class: "adv-row"});
+    r.innerHTML = `<span>${esc(p.name)}</span>` + ["price","dur","buy","daily","comp"].map(k => `<input type="number" data-p="${i}" data-k="${k}" value="${p[k]}" inputmode="numeric">`).join("");
+    ap.appendChild(r);
+  });
+  const at = $("adv-task"); at.innerHTML = '<div class="adv-row h"><span>タスク</span><span>1回</span><span>回/日</span><span>周期</span><span>単位</span><span></span></div>';
+  S.tasks.forEach((t, i) => {
+    const r = el("div", {class: "adv-row"});
+    r.innerHTML = `<span>${esc(t.name)}</span>` + ["amt","times","per"].map(k => `<input type="number" data-t="${i}" data-k="${k}" value="${t[k]}" inputmode="numeric">`).join("") +
+      `<select data-t="${i}" data-k="unit"><option${t.unit === "日" ? " selected" : ""}>日</option><option${t.unit === "月" ? " selected" : ""}>月</option></select><span></span>`;
+    at.appendChild(r);
+  });
+  const ao = $("adv-other");
+  const f = (lab, path, val) => `<label class="f">${lab}<input type="number" data-o="${path}" value="${val}" inputmode="numeric"></label>`;
+  ao.innerHTML = f("チャージ金額（円）", "charge.price", S.charge.price) + f("チャージ1回の氷晶", "charge.gain", S.charge.gain) +
+    f("回数ボーナスの間隔（回）", "charge.every", S.charge.every) + f("回数ボーナスの氷晶", "charge.bonus", S.charge.bonus) +
+    f("開始時点のチャージ累計回数", "initCharge", S.initCharge) + f("開始日は連続課金ボーナスの何日目か（1〜7）", "cycleOffset", S.cycleOffset) +
+    f("ボーナスの最低課金額（円）", "minSpend", S.minSpend) +
+    S.streak.map((v, i) => f(`連続課金 ${i + 1}日目の氷晶`, "streak." + i, v)).join("");
+}
+
+function buildBasics(){ $("start").value = S.start; $("days").value = S.days; $("init").value = S.init; $("target").value = S.target; }
+
+// ---- render ----
+function render(){
+  const R = simulate();
+  const end = R.start + R.days - 1;
+  $("k-final").textContent = fmt(R.final);
+  $("k-period").textContent = `${md(R.start)}〜${md(end)}（${R.days}日）`;
+  $("k-cost").textContent = fmt(R.cost) + "円";
+  $("k-perday").textContent = "1日あたり " + fmt(R.cost / R.days) + "円";
+  const payCr = R.passCr.reduce((a, b) => a + b, 0) + R.chargeCr + R.streakCr;
+  const taskCr = R.taskCr.reduce((a, b) => a + b, 0);
+  $("k-eff").textContent = R.cost ? (payCr / R.cost * 100).toFixed(1) : "0";
+  $("r-pay").textContent = fmt(payCr); $("r-task").textContent = fmt(taskCr); $("r-other").textContent = fmt(R.otherCr);
+  const tgt = +S.target || 0;
+  const hit = R.rows.find(r => r.cum >= tgt);
+  if (hit) { const [y, m, d] = ymd(hit.day); $("k-reach").textContent = `${m}/${d}`; $("k-reach2").textContent = `${y}年・${hit.n}日目・課金${fmt(hit.cost)}円`; }
+  else { $("k-reach").textContent = "未達"; $("k-reach2").textContent = "期間内に届きません"; }
+  drawChart(R, tgt);
+  // breakdown
+  const total = R.final - (+S.init || 0);
+  let h = "<tr><th>項目</th><th>回数</th><th>課金額</th><th>氷晶</th><th>割合</th></tr>";
+  const line = (name, cnt, yen, cr, sub) => `<tr${sub ? ' style="color:var(--sub)"' : ""}><td>${esc(name)}</td><td>${cnt === "" ? "" : fmt(cnt)}</td><td>${yen === "" ? "" : fmt(yen) + "円"}</td><td class="${cr < 0 ? "neg" : ""}">${fmt(cr)}</td><td>${sub || !total ? "" : (cr / total * 100).toFixed(1) + "%"}</td></tr>`;
+  R.P.forEach((p, i) => { h += line(p.name, R.passBuy[i], R.passBuy[i] * p.price, R.passCr[i]); });
+  h += line("チャージ", R.chargeTimes, R.chargeTimes * S.charge.price, R.chargeCr);
+  h += line("　うち回数ボーナス", R.chargeBonusTimes, "", R.chargeBonusTimes * S.charge.bonus, true);
+  h += line("連続課金ボーナス", R.streakTimes, "", R.streakCr);
+  R.T.forEach((t, i) => { h += line(t.name, R.taskHits[i], "", R.taskCr[i]); });
+  h += line("その他（手入力）", "", "", R.otherCr);
+  h += `<tr style="font-weight:700"><td>合計</td><td></td><td>${fmt(R.cost)}円</td><td>${fmt(total)}</td><td></td></tr>`;
+  $("breakdown").innerHTML = h;
+  // monthly
+  const mons = new Map();
+  R.rows.forEach(r => { const [y, m] = ymd(r.day); const key = y + "年" + m + "月"; const o = mons.get(key) || {g: 0, c: 0, end: 0}; o.g += r.gain; o.c += r.spend; o.end = r.cum; mons.set(key, o); });
+  let mh = "<tr><th>月</th><th>獲得氷晶</th><th>課金額</th><th>月末の所持</th></tr>";
+  mons.forEach((o, k) => { mh += `<tr><td>${k}</td><td>${fmt(o.g)}</td><td>${fmt(o.c)}円</td><td>${fmt(o.end)}</td></tr>`; });
+  $("monthly").innerHTML = mh;
+  if (document.querySelector("details[data-daily-open]")) renderDaily(R);
+  lastR = R;
+}
+let lastR = null;
+function renderDaily(R){
+  R = R || lastR;
+  let dh = "<tr><th>日付</th><th>購入</th><th>チャージ</th><th>連続B</th><th>パス</th><th>タスク</th><th>その他</th><th>当日</th><th>累計</th><th>課金</th></tr>";
+  R.rows.forEach(r => {
+    const [, m, d, w] = ymd(r.day);
+    const ch = r.charge ? (r.cCr > S.charge.gain ? `★${r.chargeCount}回目` : `${r.chargeCount}回目`) : "";
+    dh += `<tr><td>${m}/${d}(${WD[w]})</td><td style="text-align:left;white-space:normal;min-width:90px;font-size:11px">${esc(r.bought.join("・"))}</td><td>${ch}</td><td>${r.sb ? fmt(r.sb) : ""}</td><td>${fmt(r.pCr)}</td><td class="${r.tCr < 0 ? "neg" : ""}">${fmt(r.tCr)}</td>` +
+      `<td><input type="number" data-other="${toISO(r.day)}" value="${S.other[toISO(r.day)] || ""}" style="width:70px;padding:2px 4px" inputmode="numeric"></td><td>${fmt(r.gain)}</td><td><b>${fmt(r.cum)}</b></td><td>${fmt(r.spend)}</td></tr>`;
+  });
+  $("daily").innerHTML = dh;
+}
+
+function drawChart(R, tgt){
+  const cw = $("chart").clientWidth || 640;
+  const W = Math.max(300, Math.min(900, cw)), H = W < 500 ? 220 : 260, L = 44, Rr = 10, T = 14, B = 30;
+  const rows = R.rows, n = rows.length;
+  const maxV = Math.max(tgt, ...rows.map(r => r.cum), 1);
+  const minV = Math.min(0, ...rows.map(r => r.cum));
+  const nice = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const s = [1, 2, 2.5, 5, 10].find(k => k * p >= v); return s * p; };
+  const step = nice((maxV - minV) / 4), top = Math.ceil(maxV / step) * step, bot = Math.floor(minV / step) * step;
+  const x = i => L + (n === 1 ? 0 : i / (n - 1)) * (W - L - Rr);
+  const y = v => T + (top - v) / (top - bot) * (H - T - B);
+  let g = "";
+  for (let v = bot; v <= top + 1e-6; v += step) g += `<line x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--sub)">${v >= 10000 ? (v / 10000) + "万" : fmt(v)}</text>`;
+  const ticks = W < 500 ? 4 : 6;
+  for (let j = 0; j <= ticks; j++) { const i = Math.round((n - 1) * j / ticks); g += `<text x="${x(i)}" y="${H - 10}" text-anchor="${j === 0 ? "start" : j === ticks ? "end" : "middle"}" font-size="11" fill="var(--sub)">${md(rows[i].day)}</text>`; }
+  const pts = rows.map((r, i) => `${x(i).toFixed(1)},${y(r.cum).toFixed(1)}`).join(" ");
+  const area = `${L},${y(Math.max(bot, 0))} ${pts} ${x(n - 1)},${y(Math.max(bot, 0))}`;
+  let tg = "";
+  if (tgt > 0) tg = `<line x1="${L}" x2="${W - Rr}" y1="${y(tgt)}" y2="${y(tgt)}" stroke="var(--chart-target)" stroke-dasharray="6 4" stroke-width="1.5"/>`;
+  const hit = rows.findIndex(r => r.cum >= tgt);
+  let hp = "";
+  if (tgt > 0 && hit >= 0) hp = `<circle cx="${x(hit)}" cy="${y(rows[hit].cum)}" r="4.5" fill="var(--chart-target)"/>`;
+  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="所持氷晶の推移">${g}<polygon points="${area}" fill="var(--accent)" opacity=".12"/>${tg}<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>${hp}</svg>`;
+}
+
+// ---- events ----
+let timer = null;
+const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { save(); render(); }, 120); };
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id && ["start","days","init","target"].includes(t.id)) {
+    if (t.id === "start") { if (!t.value) return; S.start = t.value; buildLists(); }
+    else S[t.id] = t.value === "" ? 0 : +t.value;
+    schedule(); return;
+  }
+  if (t.dataset.p != null || t.dataset.t != null) {
+    const arr = t.dataset.p != null ? S.passes : S.tasks, i = +(t.dataset.p ?? t.dataset.t), k = t.dataset.k;
+    if (k === "on") arr[i].on = t.checked;
+    else if (k === "first") { if (!t.value) return; arr[i].first = t.value; }
+    else if (k === "unit") arr[i].unit = t.value;
+    else arr[i][k] = t.value === "" ? 0 : +t.value;
+    if (k === "on") t.closest(".item").classList.toggle("off", !t.checked);
+    schedule(); return;
+  }
+  if (t.dataset.o) {
+    const v = t.value === "" ? 0 : +t.value, path = t.dataset.o.split(".");
+    if (path.length === 1) S[path[0]] = v; else if (path[0] === "streak") S.streak[+path[1]] = v; else S[path[0]][path[1]] = v;
+    schedule(); return;
+  }
+  if (t.dataset.other) {
+    if (t.value === "" || +t.value === 0) delete S.other[t.dataset.other]; else S.other[t.dataset.other] = +t.value;
+    clearTimeout(timer); timer = setTimeout(() => { save(); const keep = t.dataset.other; render(); }, 400);
+  }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  // 詳細設定で名前表示が変わる物はリストを作り直す
+  if ((t.dataset.p != null || t.dataset.t != null) && t.closest("#adv-pass, #adv-task")) buildListsKeep();
+  if (t.dataset.other) renderDaily();
+});
+function buildListsKeep(){ const adv = document.activeElement; buildLists(); }
+document.querySelectorAll("[data-bulk]").forEach(b => b.addEventListener("click", () => {
+  const [kind, v] = b.dataset.bulk.split(":"); (kind === "pass" ? S.passes : S.tasks).forEach(x => x.on = v === "1");
+  buildLists(); save(); render();
+}));
+document.querySelectorAll("details").forEach(d => d.addEventListener("toggle", () => {
+  if (d.querySelector("#daily")) { if (d.open) { d.setAttribute("data-daily-open", ""); renderDaily(); } else d.removeAttribute("data-daily-open"); }
+}));
+$("reset").addEventListener("click", () => {
+  if (!confirm("入力した内容をすべて初期値に戻しますか？")) return;
+  try { localStorage.removeItem(KEY); } catch(e) {}
+  load(); buildBasics(); buildLists(); render();
+});
+
+load(); buildBasics(); buildLists(); render();
+let rz = null;
+let lastW = 0;
+const redraw = () => { const w = $("chart").clientWidth; if (w && w !== lastW && lastR) { lastW = w; drawChart(lastR, +S.target || 0); } };
+window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(redraw, 150); });
+if (window.ResizeObserver) new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(redraw, 100); }).observe($("chart"));
+})();
+</script>
+</body>
+</html>
