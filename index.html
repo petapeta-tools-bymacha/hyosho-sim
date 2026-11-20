@@ -231,6 +231,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
         <li>連続課金ボーナス：毎日800円以上課金する前提で、7日周期の2日目に600、4日目に1,300。周期は開始日から数えます（途中からの場合は詳細設定で指定）。</li>
         <li>同じ日に複数のパスの更新が重なったら、全部その日に購入。</li>
         <li>セールパック類は無料扱い。気力購入（毎日600）はマイナスで計上。</li>
+        <li>鍵から氷晶への換算は、すべて<b>0.9倍</b>で計算しています（例：バトロワ 600鍵 → 540氷晶）。換算後の数は③の「1回」の欄で変えられます。</li>
       </ul>
     </div>
   </details>
@@ -260,8 +261,8 @@ const DEFAULTS = {
     {name:"ギルドパス②", dur:14, price:1600, buy:0, daily:0, comp:0}
   ].map(p => Object.assign({on:true, first:null, count:0}, p)),
   tasks: [
-    {name:"栄誉ヘル（ダンジョン）", amt:560, times:3, per:1, unit:"日"},
-    {name:"バトロワ", amt:540, times:1, per:1, unit:"日"},
+    {name:"栄誉ヘル（ダンジョン）", amt:560, times:3, per:1, unit:"日", keys:630},
+    {name:"バトロワ", amt:540, times:1, per:1, unit:"日", keys:600},
     {name:"ギフトコード", amt:100, times:1, per:7, unit:"日"},
     {name:"天空対決", amt:700, times:1, per:14, unit:"日"},
     {name:"神の試練", amt:1200, times:1, per:14, unit:"日"},
@@ -368,7 +369,7 @@ window.__simulate = () => simulate();
 const $ = id => document.getElementById(id);
 const el = (tag, attrs, html) => { const e = document.createElement(tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); if (html != null) e.innerHTML = html; return e; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function cycleText(t){ const per = +t.per; let s = t.unit === "月" ? (per === 1 ? "毎月" : per + "か月ごと") : per === 1 ? "毎日" : per % 7 === 0 ? (per / 7) + "週ごと" : per + "日ごと"; if (+t.times > 1) s += "×" + t.times + "回"; return s; }
+function cycleText(t){ const per = +t.per; let s = t.unit === "月" ? (per === 1 ? "毎月" : per + "か月ごと") : per === 1 ? "毎日" : per % 7 === 0 ? (per / 7) + "週ごと" : per + "日ごと"; if (+t.times > 1) s += "×" + t.times + "回"; if (t.keys) s += "・" + fmt(t.keys) + "鍵を0.9倍で換算"; return s; }
 
 function buildLists(){
   const pl = $("pass-list"); pl.innerHTML = "";
