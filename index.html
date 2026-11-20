@@ -229,7 +229,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
     <summary>計算のルール</summary>
     <div class="in" style="font-size:13px">
       <ul style="padding-left:18px;margin:0">
-        <li>月パス：購入日に600、購入日を1日目として30日間毎日400。</li>
+        <li>月パス：購入日に600、購入日を1日目として30日間毎日200。</li>
         <li>ホーム／釣り／輝光バトルパス：有効期間の最終日（完走日）に完走分を付与。</li>
         <li>黄金パス／ギルドパス：氷晶はなし（課金額と連続課金ボーナスの条件にだけ関係）。</li>
         <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。②の「パスを買わない日のチャージ」をオフにするとチャージしない計算になり、パスを買わない日は連続課金ボーナスも出ません。</li>
@@ -251,11 +251,12 @@ const KEY = "petapeta-hyosho-sim-v1";
 const DEFAULTS = {
   start: null, days: 90, init: 0, target: 100000,
   initCharge: 0, cycleOffset: 1, chargeOn: true,
+  ver: 2,
   charge: {price: 800, gain: 62, every: 20, bonus: 14000},
   minSpend: 800, streak: [0, 600, 0, 1300, 0, 0, 0],
   passes: [
-    {name:"月パス①", dur:30, price:800, buy:600, daily:400, comp:0},
-    {name:"月パス②", dur:30, price:800, buy:600, daily:400, comp:0},
+    {name:"月パス①", dur:30, price:800, buy:600, daily:200, comp:0},
+    {name:"月パス②", dur:30, price:800, buy:600, daily:200, comp:0},
     {name:"ホームパス", dur:30, price:800, buy:0, daily:0, comp:4000},
     {name:"釣りパス", dur:30, price:800, buy:0, daily:0, comp:4000},
     {name:"輝光バトルパス①", dur:14, price:800, buy:0, daily:0, comp:1000},
@@ -314,6 +315,9 @@ function load(){
     if (Array.isArray(saved.passes)) saved.passes.forEach((p,i) => { if (S.passes[i]) Object.assign(S.passes[i], p); });
     if (Array.isArray(saved.tasks)) saved.tasks.forEach((t,i) => { if (S.tasks[i]) Object.assign(S.tasks[i], t); });
     if (saved.other && typeof saved.other === "object") S.other = saved.other;
+    // v2: 月パスの毎日分を400→200に訂正（前の初期値のままの人だけ直す）
+    if (!(saved.ver >= 2)) S.passes.forEach(p => { if (p.name.indexOf("月パス") === 0 && +p.daily === 400) p.daily = 200; });
+    S.ver = 2;
   }
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
