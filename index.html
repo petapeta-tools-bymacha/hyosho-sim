@@ -235,6 +235,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
         <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。②の「パスを買わない日のチャージ」をオフにするとチャージしない計算になり、パスを買わない日は連続課金ボーナスも出ません。</li>
         <li>連続課金ボーナス：800円以上課金した日を1日として数え、7日周期の2日目に600、4日目に1,300。課金しなかった日は進まず、次に課金した日に続きから進みます（途中からの場合は詳細設定で指定）。</li>
         <li>同じ日に複数のパスの更新が重なったら、全部その日に購入。</li>
+        <li>黄金パス②・輝光バトルパス②：購入日が①とずれていても、更新日は①に合わせます。②を買った期間の終わり（①と同じ日）に完走分を付与し、次からは①の更新日に一緒に購入します。</li>
         <li>セールパック類は無料扱い。気力購入（毎日600）はマイナスで計上。</li>
         <li>鍵から氷晶への換算は、すべて<b>0.9倍</b>で計算しています（例：バトロワ 600鍵 → 540氷晶）。換算後の数は③の「1回」の欄で変えられます。</li>
       </ul>
@@ -260,9 +261,9 @@ const DEFAULTS = {
     {name:"ホームパス", dur:30, price:800, buy:0, daily:0, comp:4000},
     {name:"釣りパス", dur:30, price:800, buy:0, daily:0, comp:4000},
     {name:"輝光バトルパス①", dur:14, price:800, buy:0, daily:0, comp:1000},
-    {name:"輝光バトルパス②", dur:14, price:1600, buy:0, daily:0, comp:1400},
+    {name:"輝光バトルパス②", dur:14, price:1600, buy:0, daily:0, comp:1400, link:4},
     {name:"黄金パス①", dur:7, price:800, buy:0, daily:0, comp:0},
-    {name:"黄金パス②", dur:7, price:1600, buy:0, daily:0, comp:0},
+    {name:"黄金パス②", dur:7, price:1600, buy:0, daily:0, comp:0, link:6},
     {name:"ギルドパス①", dur:14, price:800, buy:0, daily:0, comp:0},
     {name:"ギルドパス②", dur:14, price:1600, buy:0, daily:0, comp:0}
   ].map(p => Object.assign({on:true, first:null, count:0}, p)),
@@ -327,6 +328,16 @@ function kiryokuIndex(){ return S.tasks.findIndex(t => t.name.indexOf("気力") 
 function simulate(){
   const start = toNum(S.start), days = Math.max(1, Math.min(730, Math.floor(+S.days || 1)));
   const P = S.passes.map(p => ({...p, f: toNum(p.first || S.start), dur: Math.max(1, +p.dur|0), count: Math.max(0, +p.count|0)}));
+  // ②（link付き）は購入日が①とずれても、更新日（期間の区切り）は①に合わせる
+  P.forEach(p => {
+    if (p.link == null || !P[p.link]) return;
+    const L = P[p.link]; p.a = L.f; p.dur = L.dur; p.pc = 0; p.until = -Infinity;
+    const ps = start - mod(start - p.a, p.dur);           // 開始日を含む期間の初日
+    if (p.f < start && ps < start) {                       // 開始日前に買って、その期間が続いている
+      p.pc = (ps - (p.f - mod(p.f - p.a, p.dur))) / p.dur + 1;
+      if (p.count === 0 || p.pc <= p.count) p.until = ps + p.dur - 1;
+    }
+  });
   const T = S.tasks.map(t => ({...t, f: toNum(t.first || S.start), per: Math.max(1, +t.per|0)}));
   const rows = []; let cum = +S.init || 0, cost = 0, chargeCount = +S.initCharge || 0;
   const passCr = P.map(() => 0), passBuy = P.map(() => 0), taskCr = T.map(() => 0), taskHits = T.map(() => 0);
@@ -336,6 +347,14 @@ function simulate(){
     const day = start + n - 1;
     let passCost = 0, pCr = 0; const bought = [];
     P.forEach((p, i) => {
+      if (p.a != null) {
+        if (!p.on || day < p.f) return;
+        const b = (day === p.f || (day > p.f && mod(day - p.a, p.dur) === 0)) && (p.count === 0 || p.pc < p.count);
+        if (b) { p.pc++; p.until = day + p.dur - 1 - mod(day - p.a, p.dur); passCost += +p.price; passBuy[i]++; bought.push(p.name); }
+        if (day > p.until) return;
+        const c = (b ? +p.buy : 0) + (+p.daily) + (day === p.until ? +p.comp : 0);
+        passCr[i] += c; pCr += c; return;
+      }
       const k = day - p.f;
       const inPer = p.on && k >= 0 && (p.count === 0 || k < p.dur * p.count);
       if (!inPer) return;
@@ -394,8 +413,8 @@ function buildLists(){
     const gets = [p.buy ? "購入時" + fmt(p.buy) : "", p.daily ? "毎日" + fmt(p.daily) : "", p.comp ? "完走" + fmt(p.comp) : ""].filter(Boolean).join("・") || "氷晶なし";
     const it = el("div", {class: "item" + (p.on ? "" : " off")});
     it.innerHTML = `<label class="sw"><input type="checkbox" data-p="${i}" data-k="on" ${p.on ? "checked" : ""} aria-label="${esc(p.name)}を買う"><span></span></label>
-      <div><div class="name">${esc(p.name)}</div><div class="meta">${fmt(p.price)}円・${p.dur}日／${gets}</div></div>
-      <div class="ctl"><label>初回 <input type="date" data-p="${i}" data-k="first" value="${p.first || S.start}"></label>
+      <div><div class="name">${esc(p.name)}</div><div class="meta">${fmt(p.price)}円・${p.link != null && S.passes[p.link] ? "更新日は" + esc(S.passes[p.link].name) + "に合わせる" : p.dur + "日"}／${gets}</div></div>
+      <div class="ctl"><label>${p.link != null ? "購入日" : "初回"} <input type="date" data-p="${i}" data-k="first" value="${p.first || S.start}"></label>
       <label>回数 <input type="number" min="0" data-p="${i}" data-k="count" value="${+p.count > 0 ? p.count : ""}" placeholder="ずっと" inputmode="numeric"></label></div>`;
     pl.appendChild(it);
   });
