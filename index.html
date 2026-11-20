@@ -159,6 +159,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
       <label>&nbsp;<button class="pri" id="log-save" type="button">記録する</button></label>
       <label class="wide">メモ<input type="text" id="log-memo" maxlength="200" placeholder="例 ヘル2回だけ・限定ガチャ10連"></label>
     </div>
+    <p class="note" id="kiryoku-note" style="background:var(--accent-soft);border-radius:8px;padding:6px 8px;margin-top:8px"></p>
     <div class="msg" id="log-msg" aria-live="polite"></div>
     <div class="logbtns">
       <button type="button" id="log-rebase">最新の記録から計算し直す</button>
@@ -452,6 +453,7 @@ function render(){
   if (document.querySelector("details[data-daily-open]")) renderDaily(R);
   lastR = R;
   renderLog(R);
+  renderKiryokuNote();
 }
 let lastR = null;
 function renderDaily(R){
@@ -567,6 +569,15 @@ function logAnalysis(R){
   return out;
 }
 const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "±") + fmt(Math.abs(v));
+function renderKiryokuNote(){
+  const k = S.tasks.find(t => t.name.indexOf("気力") >= 0);
+  const el = $("kiryoku-note"); if (!el) return;
+  if (k && k.on && +k.amt < 0) {
+    el.innerHTML = `⚡ <b>気力回復に使った氷晶は「使った氷晶」に書かなくてOK</b>です。予定のほうで「気力購入」として毎日${fmt(-k.amt * k.times)}を差し引き済みなので、書くと二重に引かれます。その日に${fmt(-k.amt * k.times)}より多く気力を買ったときだけ、多かった分を書いてください。`;
+  } else {
+    el.innerHTML = `⚡ いまは③の「気力購入」がオフなので、<b>気力回復に使った氷晶も「使った氷晶」に書いてください</b>（予定のほうでは差し引いていません）。`;
+  }
+}
 function renderLog(R){
   R = R || lastR;
   const list = logAnalysis(R).reverse();
