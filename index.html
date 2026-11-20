@@ -156,8 +156,9 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
       <label>日付<input type="date" id="log-date"></label>
       <label>実際の所持氷晶<input type="number" id="log-have" min="0" inputmode="numeric" placeholder="例 52000"></label>
       <label>使った氷晶（ガチャ等）<input type="number" id="log-used" min="0" inputmode="numeric" placeholder="0"></label>
-      <label>&nbsp;<button class="pri" id="log-save" type="button">記録する</button></label>
+      <label>気力に使った氷晶<input type="number" id="log-kiryoku" min="0" inputmode="numeric" placeholder="600"></label>
       <label class="wide">メモ<input type="text" id="log-memo" maxlength="200" placeholder="例 ヘル2回だけ・限定ガチャ10連"></label>
+      <label class="wide"><button class="pri" id="log-save" type="button">記録する</button></label>
     </div>
     <p class="note" id="kiryoku-note" style="background:var(--accent-soft);border-radius:8px;padding:6px 8px;margin-top:8px"></p>
     <div class="msg" id="log-msg" aria-live="polite"></div>
@@ -232,7 +233,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
         <li>ホーム／釣り／輝光バトルパス：有効期間の最終日（完走日）に完走分を付与。</li>
         <li>黄金パス／ギルドパス：氷晶はなし（課金額と連続課金ボーナスの条件にだけ関係）。</li>
         <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。②の「パスを買わない日のチャージ」をオフにするとチャージしない計算になり、パスを買わない日は連続課金ボーナスも出ません。</li>
-        <li>連続課金ボーナス：毎日800円以上課金する前提で、7日周期の2日目に600、4日目に1,300。周期は開始日から数えます（途中からの場合は詳細設定で指定）。</li>
+        <li>連続課金ボーナス：800円以上課金した日を1日として数え、7日周期の2日目に600、4日目に1,300。課金しなかった日は進まず、次に課金した日に続きから進みます（途中からの場合は詳細設定で指定）。</li>
         <li>同じ日に複数のパスの更新が重なったら、全部その日に購入。</li>
         <li>セールパック類は無料扱い。気力購入（毎日600）はマイナスで計上。</li>
         <li>鍵から氷晶への換算は、すべて<b>0.9倍</b>で計算しています（例：バトロワ 600鍵 → 540氷晶）。換算後の数は③の「1回」の欄で変えられます。</li>
@@ -318,13 +319,15 @@ function load(){
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 
 // ---- engine (Excel版と同じルール) ----
+function kiryokuIndex(){ return S.tasks.findIndex(t => t.name.indexOf("気力") >= 0 && +t.amt < 0); }
 function simulate(){
   const start = toNum(S.start), days = Math.max(1, Math.min(730, Math.floor(+S.days || 1)));
   const P = S.passes.map(p => ({...p, f: toNum(p.first || S.start), dur: Math.max(1, +p.dur|0), count: Math.max(0, +p.count|0)}));
   const T = S.tasks.map(t => ({...t, f: toNum(t.first || S.start), per: Math.max(1, +t.per|0)}));
   const rows = []; let cum = +S.init || 0, cost = 0, chargeCount = +S.initCharge || 0;
   const passCr = P.map(() => 0), passBuy = P.map(() => 0), taskCr = T.map(() => 0), taskHits = T.map(() => 0);
-  let chargeTimes = 0, chargeCr = 0, chargeBonusTimes = 0, streakCr = 0, streakTimes = 0, otherCr = 0;
+  let chargeTimes = 0, chargeCr = 0, chargeBonusTimes = 0, streakCr = 0, streakTimes = 0, otherCr = 0, paid = 0;
+  const KI = kiryokuIndex(), kOn = KI >= 0 && T[KI].on;
   for (let n = 1; n <= days; n++) {
     const day = start + n - 1;
     let passCost = 0, pCr = 0; const bought = [];
@@ -345,8 +348,9 @@ function simulate(){
       chargeCr += cCr;
     }
     const spend = passCost + charge * (+S.charge.price);
-    const cyc = mod(n - 1 + (+S.cycleOffset || 1) - 1, 7) + 1;
-    const sb = spend >= +S.minSpend ? (+S.streak[cyc - 1] || 0) : 0;
+    // 連続課金ボーナスは「課金した日数」で進む（課金しない日は止まる）
+    let cyc = 0, sb = 0;
+    if (spend >= +S.minSpend) { cyc = mod(paid + (+S.cycleOffset || 1) - 1, 7) + 1; paid++; sb = +S.streak[cyc - 1] || 0; }
     if (sb > 0) streakTimes++;
     streakCr += sb;
     const [y, m, dd] = ymd(day);
@@ -358,12 +362,17 @@ function simulate(){
         const [fy, fm, fd] = ymd(t.f);
         hit = dd === fd && mod((y - fy) * 12 + m - fm, t.per) === 0;
       } else hit = mod(day - t.f, t.per) === 0;
-      if (hit) { const v = (+t.amt) * (+t.times); taskCr[i] += v; taskHits[i]++; tCr += v; }
+      if (hit) {
+        let v = (+t.amt) * (+t.times);
+        // 記録のある日は、実際に気力に使った氷晶で置きかえる
+        if (i === KI && kOn) { const e = LOG[toISO(day)]; if (e && e.kiryoku != null && e.kiryoku !== "") v = -(+e.kiryoku); }
+        taskCr[i] += v; taskHits[i]++; tCr += v;
+      }
     });
     const oth = +(S.other[toISO(day)] || 0); otherCr += oth;
     const gain = pCr + cCr + sb + tCr + oth;
     cum += gain; cost += spend;
-    rows.push({n, day, passCost, bought, charge, chargeCount, cCr, cyc, sb, tCr, pCr, oth, gain, cum, spend, cost});
+    rows.push({n, day, passCost, bought, charge, chargeCount, cCr, cyc, paid, sb, tCr, pCr, oth, gain, cum, spend, cost});
   }
   return {rows, days, start, P, T, passCr, passBuy, taskCr, taskHits, chargeTimes, chargeCr, chargeBonusTimes, streakCr, streakTimes, otherCr, cost, final: cum};
 }
@@ -413,7 +422,7 @@ function buildLists(){
   const f = (lab, path, val) => `<label class="f">${lab}<input type="number" data-o="${path}" value="${val}" inputmode="numeric"></label>`;
   ao.innerHTML = f("チャージ金額（円）", "charge.price", S.charge.price) + f("チャージ1回の氷晶", "charge.gain", S.charge.gain) +
     f("回数ボーナスの間隔（回）", "charge.every", S.charge.every) + f("回数ボーナスの氷晶", "charge.bonus", S.charge.bonus) +
-    f("開始時点のチャージ累計回数", "initCharge", S.initCharge) + f("開始日は連続課金ボーナスの何日目か（1〜7）", "cycleOffset", S.cycleOffset) +
+    f("開始時点のチャージ累計回数", "initCharge", S.initCharge) + f("開始日以降、最初に課金する日は連続課金ボーナスの何日目か（1〜7）", "cycleOffset", S.cycleOffset) +
     f("ボーナスの最低課金額（円）", "minSpend", S.minSpend) +
     S.streak.map((v, i) => f(`連続課金 ${i + 1}日目の氷晶`, "streak." + i, v)).join("");
 }
@@ -570,11 +579,11 @@ function logAnalysis(R){
   const out = []; let cumUsed = 0, prevHave = null;
   Object.keys(LOG).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().forEach(d => {
     const e = LOG[d], n = toNum(d), idx = n - R.start;
-    const have = e.have === "" || e.have == null ? null : +e.have, used = +e.used || 0;
+    const have = e.have === "" || e.have == null ? null : +e.have, used = +e.used || 0, kiryoku = e.kiryoku == null || e.kiryoku === "" ? null : +e.kiryoku;
     if (idx >= 0) cumUsed += used;
     const pred = idx >= 0 && idx < R.rows.length ? R.rows[idx].cum : null;
     const back = idx >= 0 ? cumUsed : 0;
-    out.push({d, n, idx, have, used, memo: e.memo || "", pred, cumUsed: back,
+    out.push({d, n, idx, have, used, kiryoku, memo: e.memo || "", pred, cumUsed: back,
       diff: have != null && pred != null ? have + back - pred : null,
       delta: have != null && prevHave != null ? have - prevHave : null});
     if (have != null) prevHave = have;
@@ -585,9 +594,13 @@ const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "±") + fmt(Math.abs(v));
 function renderKiryokuNote(){
   const k = S.tasks.find(t => t.name.indexOf("気力") >= 0);
   const el = $("kiryoku-note"); if (!el) return;
+  const ki = $("log-kiryoku");
   if (k && k.on && +k.amt < 0) {
-    el.innerHTML = `⚡ <b>気力回復に使った氷晶は「使った氷晶」に書かなくてOK</b>です。予定のほうで「気力購入」として毎日${fmt(-k.amt * k.times)}を差し引き済みなので、書くと二重に引かれます。その日に${fmt(-k.amt * k.times)}より多く気力を買ったときだけ、多かった分を書いてください。`;
+    const v = fmt(-k.amt * k.times);
+    ki.disabled = false; ki.placeholder = String(-k.amt * k.times);
+    el.innerHTML = `⚡ <b>気力回復に使った氷晶は「気力に使った氷晶」の欄に</b>書いてください（「使った氷晶」には入れません）。空欄なら予定どおり${v}使った計算です。180しか使わなかった日は180、多く買った日はその数を入れると、その日の計算が実際の数に置きかわります。`;
   } else {
+    ki.disabled = true; ki.value = ""; ki.placeholder = "③でオフ";
     el.innerHTML = `⚡ いまは③の「気力購入」がオフなので、<b>気力回復に使った氷晶も「使った氷晶」に書いてください</b>（予定のほうでは差し引いていません）。`;
   }
 }
@@ -602,6 +615,7 @@ function renderLog(R){
     if (e.diff != null) tags.push(`予定差 <span class="${e.diff >= 0 ? "up" : "down"}">${sign(e.diff)}</span>`);
     else if (e.have != null) tags.push("予定差 ―（計算期間外）");
     if (e.used) tags.push(`使った ${fmt(e.used)}`);
+    if (e.kiryoku != null) tags.push(`気力 ${fmt(e.kiryoku)}`);
     if (e.pred != null) tags.push(`予定 ${fmt(e.pred)}`);
     return `<div class="log"><div class="d">${y}/${m}/${d}（${WD[w]}）</div><div class="h">${e.have != null ? fmt(e.have) : "―"}</div>
       <div class="tags">${tags.map(t => `<span>${t}</span>`).join("")}</div>${e.memo ? `<div class="memo">${esc(e.memo)}</div>` : ""}
@@ -610,16 +624,16 @@ function renderLog(R){
 }
 function fillLogForm(d){
   $("log-date").value = d; const e = LOG[d];
-  $("log-have").value = e && e.have != null ? e.have : ""; $("log-used").value = e && e.used ? e.used : ""; $("log-memo").value = e ? e.memo || "" : "";
+  $("log-have").value = e && e.have != null ? e.have : ""; $("log-used").value = e && e.used ? e.used : ""; if (!$("log-kiryoku").disabled) $("log-kiryoku").value = e && e.kiryoku != null ? e.kiryoku : ""; $("log-memo").value = e ? e.memo || "" : "";
 }
 let msgT = null;
 function flash(t, bad){ const m = $("log-msg"); m.textContent = t; m.style.color = bad ? "var(--warn)" : "var(--good)"; clearTimeout(msgT); msgT = setTimeout(() => m.textContent = "", 4000); }
 $("log-date").addEventListener("change", e => { if (e.target.value) fillLogForm(e.target.value); });
 $("log-save").addEventListener("click", () => {
-  const d = $("log-date").value, hv = $("log-have").value, us = $("log-used").value, memo = $("log-memo").value.trim();
+  const d = $("log-date").value, hv = $("log-have").value, us = $("log-used").value, kr = $("log-kiryoku").disabled ? "" : $("log-kiryoku").value, memo = $("log-memo").value.trim();
   if (!d) return flash("日付を入れてください", true);
-  if (hv === "" && !us && !memo) return flash("所持氷晶・使った氷晶・メモのどれかを入れてください", true);
-  LOG[d] = {have: hv === "" ? null : +hv, used: us === "" ? 0 : +us, memo};
+  if (hv === "" && !us && kr === "" && !memo) return flash("所持氷晶・使った氷晶・気力・メモのどれかを入れてください", true);
+  LOG[d] = {have: hv === "" ? null : +hv, used: us === "" ? 0 : +us, kiryoku: kr === "" ? null : +kr, memo};
   const ok = saveLog(); render();
   flash(ok ? `${md(toNum(d))} の記録を保存しました` : "この画面では保存できませんでした（ブラウザの設定を確認してください）", !ok);
 });
@@ -635,9 +649,11 @@ $("log-rebase").addEventListener("click", () => {
   const oldStart = S.start, newStart = toISO(toNum(last) + 1), shift = toNum(newStart) - toNum(oldStart);
   S.passes.forEach(p => { if (!p.first) p.first = oldStart; });
   S.tasks.forEach(t => { if (!t.first) t.first = oldStart; });
-  S.cycleOffset = mod((+S.cycleOffset || 1) - 1 + shift, 7) + 1;
   const R0 = simulate(), lastRow = R0.rows[toNum(last) - R0.start];
-  if (lastRow) S.initCharge = mod(lastRow.chargeCount, Math.max(1, +S.charge.every | 0));
+  if (lastRow) {
+    S.initCharge = mod(lastRow.chargeCount, Math.max(1, +S.charge.every | 0));
+    S.cycleOffset = mod((+S.cycleOffset || 1) - 1 + lastRow.paid, 7) + 1;
+  }
   S.start = newStart; S.init = +LOG[last].have; save(); buildBasics(); buildLists(); render();
   flash(`${md(toNum(last))} の所持 ${fmt(S.init)} から、${md(toNum(newStart))} 以降を計算し直しました（パスの購入日などはそのまま）`);
 });
