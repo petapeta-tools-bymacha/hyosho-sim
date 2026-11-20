@@ -184,7 +184,11 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
       <h2><span class="n">2</span>買うパス</h2>
       <div class="bulk"><button data-bulk="pass:1">全部オン</button><button data-bulk="pass:0">全部オフ</button></div>
       <div id="pass-list"></div>
-      <p class="note">期限が切れた日に次を購入する計算です（購入日＝初回購入日＋有効日数×n）。回数が「ずっと」（空欄）なら更新し続け、数字を入れるとその回数で終わります。買わないパスはスイッチをオフに。</p>
+      <div class="item" id="charge-item" style="border-top:2px solid var(--line);margin-top:4px">
+        <label class="sw"><input type="checkbox" id="charge-on" checked aria-label="パスを買わない日にチャージする"><span></span></label>
+        <div><div class="name">パスを買わない日のチャージ</div><div class="meta" id="charge-meta"></div></div>
+      </div>
+      <p class="note">期限が切れた日に次を購入する計算です（購入日＝初回購入日＋有効日数×n）。回数が「ずっと」（空欄）なら更新し続け、数字を入れるとその回数で終わります。買わないパスはスイッチをオフに。一番下のスイッチで、パスを買わない日の800円チャージもオン・オフできます（「全部オン／オフ」ボタンでは変わりません）。</p>
     </section>
     <section class="card">
       <h2><span class="n">3</span>日々のタスク</h2>
@@ -227,7 +231,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
         <li>月パス：購入日に600、購入日を1日目として30日間毎日400。</li>
         <li>ホーム／釣り／輝光バトルパス：有効期間の最終日（完走日）に完走分を付与。</li>
         <li>黄金パス／ギルドパス：氷晶はなし（課金額と連続課金ボーナスの条件にだけ関係）。</li>
-        <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。</li>
+        <li>その日にパスを買わない（800円未満の）日は、800円チャージ（+62）。累計20回ごとに+14,000。②の「パスを買わない日のチャージ」をオフにするとチャージしない計算になり、パスを買わない日は連続課金ボーナスも出ません。</li>
         <li>連続課金ボーナス：毎日800円以上課金する前提で、7日周期の2日目に600、4日目に1,300。周期は開始日から数えます（途中からの場合は詳細設定で指定）。</li>
         <li>同じ日に複数のパスの更新が重なったら、全部その日に購入。</li>
         <li>セールパック類は無料扱い。気力購入（毎日600）はマイナスで計上。</li>
@@ -245,7 +249,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
 const KEY = "petapeta-hyosho-sim-v1";
 const DEFAULTS = {
   start: null, days: 90, init: 0, target: 100000,
-  initCharge: 0, cycleOffset: 1,
+  initCharge: 0, cycleOffset: 1, chargeOn: true,
   charge: {price: 800, gain: 62, every: 20, bonus: 14000},
   minSpend: 800, streak: [0, 600, 0, 1300, 0, 0, 0],
   passes: [
@@ -303,7 +307,7 @@ function load(){
   S = clone(DEFAULTS);
   S.start = todayISO();
   if (saved && typeof saved === "object") {
-    for (const k of ["start","days","init","target","initCharge","cycleOffset","minSpend"]) if (saved[k] != null) S[k] = saved[k];
+    for (const k of ["start","days","init","target","initCharge","cycleOffset","minSpend","chargeOn"]) if (saved[k] != null) S[k] = saved[k];
     if (saved.charge) Object.assign(S.charge, saved.charge);
     if (Array.isArray(saved.streak) && saved.streak.length === 7) S.streak = saved.streak;
     if (Array.isArray(saved.passes)) saved.passes.forEach((p,i) => { if (S.passes[i]) Object.assign(S.passes[i], p); });
@@ -334,7 +338,7 @@ function simulate(){
       passCr[i] += c; pCr += c;
     });
     let charge = 0, cCr = 0;
-    if (passCost < +S.minSpend) {
+    if (S.chargeOn !== false && passCost < +S.minSpend) {
       charge = 1; chargeCount++; chargeTimes++;
       cCr = +S.charge.gain;
       if (mod(chargeCount, Math.max(1, +S.charge.every|0)) === 0) { cCr += +S.charge.bonus; chargeBonusTimes++; }
@@ -414,7 +418,14 @@ function buildLists(){
     S.streak.map((v, i) => f(`連続課金 ${i + 1}日目の氷晶`, "streak." + i, v)).join("");
 }
 
-function buildBasics(){ $("start").value = S.start; $("days").value = S.days; $("init").value = S.init; $("target").value = S.target; }
+function buildBasics(){ $("start").value = S.start; $("days").value = S.days; $("init").value = S.init; $("target").value = S.target; syncCharge(); }
+function syncCharge(){
+  const on = S.chargeOn !== false;
+  $("charge-on").checked = on; $("charge-item").classList.toggle("off", !on);
+  $("charge-meta").textContent = on
+    ? `${fmt(S.charge.price)}円で+${fmt(S.charge.gain)}・${S.charge.every}回ごとに+${fmt(S.charge.bonus)}`
+    : `チャージしない（パスを買わない日は課金0円・連続課金ボーナスも出ません）`;
+}
 
 // ---- render ----
 function render(){
@@ -505,6 +516,7 @@ let timer = null;
 const schedule = () => { clearTimeout(timer); timer = setTimeout(() => { save(); render(); }, 120); };
 document.addEventListener("input", e => {
   const t = e.target;
+  if (t.id === "charge-on") { S.chargeOn = t.checked; syncCharge(); schedule(); return; }
   if (t.id && ["start","days","init","target"].includes(t.id)) {
     if (t.id === "start") { if (!t.value) return; S.start = t.value; buildLists(); }
     else S[t.id] = t.value === "" ? 0 : +t.value;
@@ -522,7 +534,7 @@ document.addEventListener("input", e => {
   if (t.dataset.o) {
     const v = t.value === "" ? 0 : +t.value, path = t.dataset.o.split(".");
     if (path.length === 1) S[path[0]] = v; else if (path[0] === "streak") S.streak[+path[1]] = v; else S[path[0]][path[1]] = v;
-    schedule(); return;
+    syncCharge(); schedule(); return;
   }
   if (t.dataset.other) {
     if (t.value === "" || +t.value === 0) delete S.other[t.dataset.other]; else S.other[t.dataset.other] = +t.value;
