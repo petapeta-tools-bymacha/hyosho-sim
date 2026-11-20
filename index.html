@@ -89,6 +89,23 @@ details .in{padding-bottom:14px}
 .chart svg{width:100%;height:auto;display:block}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--sub);margin-top:4px}
 .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+.legend b{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:middle;margin-right:4px}
+.logform{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.logform label{display:flex;flex-direction:column;font-size:12px;color:var(--sub);gap:3px}
+.logform input{width:100%;text-align:left}
+.logform .wide{grid-column:1/-1}
+.logform input[type=number]{text-align:right}
+.logbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.logs{margin-top:10px}
+.log{border-top:1px solid var(--line);padding:8px 0;display:grid;grid-template-columns:1fr auto;gap:2px 8px}
+.log .d{font-weight:700;font-size:13.5px}
+.log .h{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;text-align:right}
+.log .tags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+.log .memo{grid-column:1/-1;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.log .ops{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end}
+.log .ops button{font-size:11.5px;padding:3px 8px}
+.up{color:var(--good)} .down{color:var(--warn)}
+.msg{font-size:12px;color:var(--good);min-height:1em;margin-top:4px}
 .note{font-size:11.5px;color:var(--sub);margin:6px 0 0}
 .adv-grid{display:grid;grid-template-columns:1fr;gap:4px}
 .adv-row{display:grid;grid-template-columns:1fr repeat(5,64px);gap:4px;align-items:center;font-size:12px}
@@ -129,7 +146,27 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
       <div><span>うち手入力（その他）</span><span id="r-other">-</span></div>
     </div>
     <div class="chart" id="chart"></div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>所持氷晶</span><span><i style="background:var(--chart-target)"></i>目標</span></div>
+    <div class="legend" style="flex-wrap:wrap"><span><i style="background:var(--accent)"></i>予定（計算）</span><span><i style="background:var(--chart-target)"></i>目標</span><span><b style="background:var(--good)"></b>実際（記録）</span><span><b style="border:2px solid var(--good)"></b>使った分を戻した値</span></div>
+  </section>
+
+  <section class="card" id="log-card">
+    <h2>📒 実際の記録（日記）</h2>
+    <div class="logform">
+      <label>日付<input type="date" id="log-date"></label>
+      <label>実際の所持氷晶<input type="number" id="log-have" min="0" inputmode="numeric" placeholder="例 52000"></label>
+      <label>使った氷晶（ガチャ等）<input type="number" id="log-used" min="0" inputmode="numeric" placeholder="0"></label>
+      <label>&nbsp;<button class="pri" id="log-save" type="button">記録する</button></label>
+      <label class="wide">メモ<input type="text" id="log-memo" maxlength="200" placeholder="例 ヘル2回だけ・限定ガチャ10連"></label>
+    </div>
+    <div class="msg" id="log-msg" aria-live="polite"></div>
+    <div class="logbtns">
+      <button type="button" id="log-rebase">最新の記録から計算し直す</button>
+      <button type="button" id="backup">バックアップを保存</button>
+      <button type="button" id="restore-btn">バックアップから戻す</button>
+      <input type="file" id="restore-file" accept=".json,application/json" hidden>
+    </div>
+    <p class="note">記録はこの端末（ブラウザ）の中にだけ保存されます。ときどき「バックアップを保存」でファイルに残しておくと、機種変更やデータ消去のときも戻せます。「予定差」は、使った氷晶を足し戻したうえで計算の予定と比べた差です。</p>
+    <div class="logs" id="log-list"></div>
   </section>
 
   <section class="card">
@@ -413,6 +450,7 @@ function render(){
   $("monthly").innerHTML = mh;
   if (document.querySelector("details[data-daily-open]")) renderDaily(R);
   lastR = R;
+  renderLog(R);
 }
 let lastR = null;
 function renderDaily(R){
@@ -431,7 +469,9 @@ function drawChart(R, tgt){
   const cw = $("chart").clientWidth || 640;
   const W = Math.max(300, Math.min(900, cw)), H = W < 500 ? 220 : 260, L = 44, Rr = 10, T = 14, B = 30;
   const rows = R.rows, n = rows.length;
-  const maxV = Math.max(tgt, ...rows.map(r => r.cum), 1);
+  const LP = logAnalysis(R).filter(e => e.have != null && e.idx >= 0 && e.idx < n);
+  const lv = LP.flatMap(e => [e.have, e.have + e.cumUsed]);
+  const maxV = Math.max(tgt, ...rows.map(r => r.cum), ...lv, 1);
   const minV = Math.min(0, ...rows.map(r => r.cum));
   const nice = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const s = [1, 2, 2.5, 5, 10].find(k => k * p >= v); return s * p; };
   const step = nice((maxV - minV) / 4), top = Math.ceil(maxV / step) * step, bot = Math.floor(minV / step) * step;
@@ -448,7 +488,12 @@ function drawChart(R, tgt){
   const hit = rows.findIndex(r => r.cum >= tgt);
   let hp = "";
   if (tgt > 0 && hit >= 0) hp = `<circle cx="${x(hit)}" cy="${y(rows[hit].cum)}" r="4.5" fill="var(--chart-target)"/>`;
-  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="所持氷晶の推移">${g}<polygon points="${area}" fill="var(--accent)" opacity=".12"/>${tg}<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>${hp}</svg>`;
+  let lp = "";
+  LP.forEach(e => {
+    if (e.cumUsed > 0) lp += `<circle cx="${x(e.idx)}" cy="${y(e.have + e.cumUsed)}" r="3.5" fill="var(--card)" stroke="var(--good)" stroke-width="1.8"><title>${md(e.n)} 使った分を戻すと ${fmt(e.have + e.cumUsed)}</title></circle>`;
+    lp += `<circle cx="${x(e.idx)}" cy="${y(e.have)}" r="3.8" fill="var(--good)"><title>${md(e.n)} 実際 ${fmt(e.have)}</title></circle>`;
+  });
+  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="所持氷晶の推移">${g}<polygon points="${area}" fill="var(--accent)" opacity=".12"/>${tg}<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>${hp}${lp}</svg>`;
 }
 
 // ---- events ----
@@ -500,6 +545,102 @@ $("reset").addEventListener("click", () => {
   load(); buildBasics(); buildLists(); render();
 });
 
+// ---- 記録（日記） ----
+const LOGKEY = "petapeta-hyosho-log-v1";
+let LOG = {};
+function loadLog(){ try { const v = JSON.parse(localStorage.getItem(LOGKEY) || "{}"); LOG = v && typeof v === "object" ? v : {}; } catch(e) { LOG = {}; } }
+function saveLog(){ try { localStorage.setItem(LOGKEY, JSON.stringify(LOG)); return true; } catch(e) { return false; } }
+function logAnalysis(R){
+  const out = []; let cumUsed = 0, prevHave = null;
+  Object.keys(LOG).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().forEach(d => {
+    const e = LOG[d], n = toNum(d), idx = n - R.start;
+    const have = e.have === "" || e.have == null ? null : +e.have, used = +e.used || 0;
+    if (idx >= 0) cumUsed += used;
+    const pred = idx >= 0 && idx < R.rows.length ? R.rows[idx].cum : null;
+    const back = idx >= 0 ? cumUsed : 0;
+    out.push({d, n, idx, have, used, memo: e.memo || "", pred, cumUsed: back,
+      diff: have != null && pred != null ? have + back - pred : null,
+      delta: have != null && prevHave != null ? have - prevHave : null});
+    if (have != null) prevHave = have;
+  });
+  return out;
+}
+const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "±") + fmt(Math.abs(v));
+function renderLog(R){
+  R = R || lastR;
+  const list = logAnalysis(R).reverse();
+  if (!list.length) { $("log-list").innerHTML = '<p class="note">まだ記録がありません。上の欄に今日の所持氷晶を入れて「記録する」を押してください。</p>'; return; }
+  $("log-list").innerHTML = list.map(e => {
+    const [y, m, d, w] = ymd(e.n);
+    const tags = [];
+    if (e.delta != null) tags.push(`前回比 <span class="${e.delta >= 0 ? "up" : "down"}">${sign(e.delta)}</span>`);
+    if (e.diff != null) tags.push(`予定差 <span class="${e.diff >= 0 ? "up" : "down"}">${sign(e.diff)}</span>`);
+    else if (e.have != null) tags.push("予定差 ―（計算期間外）");
+    if (e.used) tags.push(`使った ${fmt(e.used)}`);
+    if (e.pred != null) tags.push(`予定 ${fmt(e.pred)}`);
+    return `<div class="log"><div class="d">${y}/${m}/${d}（${WD[w]}）</div><div class="h">${e.have != null ? fmt(e.have) : "―"}</div>
+      <div class="tags">${tags.map(t => `<span>${t}</span>`).join("")}</div>${e.memo ? `<div class="memo">${esc(e.memo)}</div>` : ""}
+      <div class="ops"><button type="button" data-log-edit="${e.d}">直す</button><button type="button" data-log-del="${e.d}">消す</button></div></div>`;
+  }).join("");
+}
+function fillLogForm(d){
+  $("log-date").value = d; const e = LOG[d];
+  $("log-have").value = e && e.have != null ? e.have : ""; $("log-used").value = e && e.used ? e.used : ""; $("log-memo").value = e ? e.memo || "" : "";
+}
+let msgT = null;
+function flash(t, bad){ const m = $("log-msg"); m.textContent = t; m.style.color = bad ? "var(--warn)" : "var(--good)"; clearTimeout(msgT); msgT = setTimeout(() => m.textContent = "", 4000); }
+$("log-date").addEventListener("change", e => { if (e.target.value) fillLogForm(e.target.value); });
+$("log-save").addEventListener("click", () => {
+  const d = $("log-date").value, hv = $("log-have").value, us = $("log-used").value, memo = $("log-memo").value.trim();
+  if (!d) return flash("日付を入れてください", true);
+  if (hv === "" && !us && !memo) return flash("所持氷晶・使った氷晶・メモのどれかを入れてください", true);
+  LOG[d] = {have: hv === "" ? null : +hv, used: us === "" ? 0 : +us, memo};
+  const ok = saveLog(); render();
+  flash(ok ? `${md(toNum(d))} の記録を保存しました` : "この画面では保存できませんでした（ブラウザの設定を確認してください）", !ok);
+});
+$("log-list").addEventListener("click", e => {
+  const ed = e.target.dataset.logEdit, del = e.target.dataset.logDel;
+  if (ed) { fillLogForm(ed); $("log-card").scrollIntoView({behavior: "smooth"}); }
+  if (del && confirm(`${md(toNum(del))} の記録を消しますか？`)) { delete LOG[del]; saveLog(); render(); flash("記録を消しました"); }
+});
+$("log-rebase").addEventListener("click", () => {
+  const last = Object.keys(LOG).sort().reverse().find(d => LOG[d].have != null && LOG[d].have !== "");
+  if (!last) return flash("所持氷晶を入れた記録がまだありません", true);
+  // 記録はその日の終わりの所持とみなし、翌日から計算し直す。パス・タスクの日付と連続課金の周期は今のまま引き継ぐ
+  const oldStart = S.start, newStart = toISO(toNum(last) + 1), shift = toNum(newStart) - toNum(oldStart);
+  S.passes.forEach(p => { if (!p.first) p.first = oldStart; });
+  S.tasks.forEach(t => { if (!t.first) t.first = oldStart; });
+  S.cycleOffset = mod((+S.cycleOffset || 1) - 1 + shift, 7) + 1;
+  const R0 = simulate(), lastRow = R0.rows[toNum(last) - R0.start];
+  if (lastRow) S.initCharge = mod(lastRow.chargeCount, Math.max(1, +S.charge.every | 0));
+  S.start = newStart; S.init = +LOG[last].have; save(); buildBasics(); buildLists(); render();
+  flash(`${md(toNum(last))} の所持 ${fmt(S.init)} から、${md(toNum(newStart))} 以降を計算し直しました（パスの購入日などはそのまま）`);
+});
+$("backup").addEventListener("click", () => {
+  const data = {app: "petapeta-hyosho-sim", version: 1, exported: new Date().toISOString(), settings: S, log: LOG};
+  const blob = new Blob([JSON.stringify(data, null, 1)], {type: "application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `氷晶記録_${todayISO()}.json`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  flash("バックアップのファイルを保存しました（ダウンロードやファイルアプリに入ります）");
+});
+$("restore-btn").addEventListener("click", () => $("restore-file").click());
+$("restore-file").addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    let data; try { data = JSON.parse(rd.result); } catch(err) { data = null; }
+    if (!data || data.app !== "petapeta-hyosho-sim" || typeof data.log !== "object") { flash("このシミュレーターのバックアップファイルではないようです", true); return; }
+    const n = Object.keys(data.log).length;
+    if (!confirm(`記録${n}件と設定を読み込みます。同じ日付の記録はファイルの内容で上書きします。よろしいですか？`)) return;
+    Object.assign(LOG, data.log); saveLog();
+    if (data.settings && typeof data.settings === "object") { try { localStorage.setItem(KEY, JSON.stringify(data.settings)); } catch(err) {} load(); buildBasics(); buildLists(); }
+    render(); flash(`バックアップから記録${n}件を戻しました`);
+  };
+  rd.readAsText(f); e.target.value = "";
+});
+
+loadLog();
+$("log-date").value = todayISO();
 load(); buildBasics(); buildLists(); render();
 let rz = null;
 let lastW = 0;
