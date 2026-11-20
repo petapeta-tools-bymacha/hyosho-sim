@@ -61,6 +61,7 @@ input[type=date]{width:150px}
 .item .ctl{grid-column:2;display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--sub);align-items:center}
 .item .ctl input[type=date]{width:140px;padding:4px 6px}
 .item .ctl input[type=number]{width:80px;padding:4px 6px}
+.item .ctl input[data-k=count]::placeholder{color:var(--accent);opacity:1;font-weight:600}
 .item.off .name,.item.off .meta{color:var(--off)}
 .item.off .ctl{opacity:.45}
 /* switch */
@@ -182,7 +183,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;margin-top:20px}
       <h2><span class="n">2</span>買うパス</h2>
       <div class="bulk"><button data-bulk="pass:1">全部オン</button><button data-bulk="pass:0">全部オフ</button></div>
       <div id="pass-list"></div>
-      <p class="note">期限が切れた日に次を購入する計算です（購入日＝初回購入日＋有効日数×n）。回数を入れるとその回数で終わります（0＝ずっと）。</p>
+      <p class="note">期限が切れた日に次を購入する計算です（購入日＝初回購入日＋有効日数×n）。回数が「ずっと」（空欄）なら更新し続け、数字を入れるとその回数で終わります。買わないパスはスイッチをオフに。</p>
     </section>
     <section class="card">
       <h2><span class="n">3</span>日々のタスク</h2>
@@ -376,7 +377,7 @@ function buildLists(){
     it.innerHTML = `<label class="sw"><input type="checkbox" data-p="${i}" data-k="on" ${p.on ? "checked" : ""} aria-label="${esc(p.name)}を買う"><span></span></label>
       <div><div class="name">${esc(p.name)}</div><div class="meta">${fmt(p.price)}円・${p.dur}日／${gets}</div></div>
       <div class="ctl"><label>初回 <input type="date" data-p="${i}" data-k="first" value="${p.first || S.start}"></label>
-      <label>回数 <input type="number" min="0" data-p="${i}" data-k="count" value="${p.count}" inputmode="numeric"></label></div>`;
+      <label>回数 <input type="number" min="0" data-p="${i}" data-k="count" value="${+p.count > 0 ? p.count : ""}" placeholder="ずっと" inputmode="numeric"></label></div>`;
     pl.appendChild(it);
   });
   const tl = $("task-list"); tl.innerHTML = "";
